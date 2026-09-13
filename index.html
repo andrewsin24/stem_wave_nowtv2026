@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STEM 科學實驗：聲音與震動</title>
+<style>
+  body { font-family: 'PingFang HK', 'Microsoft JhengHei', sans-serif; background: #f4f7f6; color: #333; margin: 0; padding: 20px; }
+  .container { max-width: 800px; margin: 0 auto; }
+  h1 { text-align: center; color: #2c3e50; }
+  .card { background: white; border-radius: 12px; padding: 25px; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+  h2 { margin-top: 0; color: #34495e; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; }
+  canvas { width: 100%; height: 180px; background: #1a1a1a; border-radius: 8px; margin: 15px 0; }
+  .controls { display: flex; flex-direction: column; gap: 15px; }
+  .control-group { display: flex; align-items: center; justify-content: space-between; }
+  input[type="range"] { width: 60%; transform: scale(1.2); cursor: pointer; }
+  button { background: #3498db; color: white; border: none; padding: 12px 24px; font-size: 18px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; margin-bottom: 10px; }
+  button.stop { background: #e74c3c; }
+  .label { font-size: 18px; font-weight: bold; width: 120px; }
+  .value { font-size: 18px; font-weight: bold; color: #3498db; width: 60px; text-align: right; }
+  .note { text-align: center; color: #7f8c8d; font-size: 16px; margin-top: 15px; line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>🔊 聲音與震動科學實驗</h1>
+
+  <!-- 實驗一：頻率產生器 -->
+  <div class="card">
+    <h2>第一部分：聲音推動鹽粒 (頻率與波形)</h2>
+    <button id="playBtn" onclick="toggleAudio()">▶️ 播放聲音</button>
+    <canvas id="oscCanvas"></canvas>
+    <div class="controls">
+      <div class="control-group">
+        <span class="label">頻率 (音高)</span>
+        <input type="range" id="freqSlider" min="20" max="1000" value="440" oninput="updateAudio()">
+        <span class="value" id="freqVal">440 Hz</span>
+      </div>
+      <div class="control-group">
+        <span class="label">音量 (能量)</span>
+        <input type="range" id="volSlider" min="0" max="100" value="50" oninput="updateAudio()">
+        <span class="value" id="volVal">50 %</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 實驗二：相位抵銷模擬器 -->
+  <div class="card">
+    <h2>第二部分：聲波抵銷魔術 (反相消音原理)</h2>
+    <button id="playPhaseBtn" onclick="togglePhaseAudio()">▶️ 播放雙聲波測試抵銷</button>
+    <canvas id="phaseCanvas"></canvas>
+    <div class="controls">
+      <div class="control-group">
+        <span class="label" style="width: 180px;">拖拉改變第二聲波相位</span>
+        <input type="range" id="phaseSlider" min="0" max="180" value="0" oninput="updatePhase()">
+        <span class="value" id="phaseVal">0 度</span>
+      </div>
+      <p class="note">親耳聽聽看！當設定為 180 度時，藍色波（原音）與紅色波（反相音）會完美互相抵銷。雖然系統正在播放兩個聲音，但總聲音會神奇地消失，下方綠色的總和波也會變成平線。</p>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ==========================================
+  // 實驗一：頻率產生器邏輯
+  // ==========================================
+  let audioCtx, oscillator, gainNode, analyser;
+  let isPlaying = false;
+  const canvas1 = document.getElementById('oscCanvas');
+  const ctx1 = canvas1.getContext('2d');
+  
+  function toggleAudio() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+    }
+    
+    if (isPlaying) {
+      oscillator.stop();
+      document.getElementById('playBtn').innerText = '▶️ 播放聲音';
+      document.getElementById('playBtn').classList.remove('stop');
+      isPlaying = false;
+    } else {
+      oscillator = audioCtx.createOscillator();
+      gainNode = audioCtx.createGain();
+      
+      oscillator.type = 'sine';
+      oscillator.connect(gainNode);
+      gainNode.connect(analyser);
+      analyser.connect(audioCtx.destination);
+      
+      updateAudio();
+      oscillator.start();
+      document.getElementById('playBtn').innerText = '⏹️ 停止播放';
+      document.getElementById('playBtn').classList.add('stop');
+      isPlaying = true;
+      drawOscillator();
+    }
+  }
+
+  function updateAudio() {
+    let freq = document.getElementById('freqSlider').value;
+    let vol = document.getElementById('volSlider').value;
+    document.getElementById('freqVal').innerText = freq + ' Hz';
+    document.getElementById('volVal').innerText = vol + ' %';
+    
+    if (isPlaying) {
+      oscillator.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      gainNode.gain.setValueAtTime(vol / 100, audioCtx.currentTime);
+    }
+  }
+
+  function drawOscillator() {
+    if (!isPlaying) return;
+    requestAnimationFrame(drawOscillator);
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    analyser.getByteTimeDomainData(dataArray);
+    
+    ctx1.fillStyle = 'rgb(26, 26, 26)';
+    ctx1.fillRect(0, 0, canvas1.width, canvas1.height);
+    ctx1.lineWidth = 3;
+    ctx1.strokeStyle = 'rgb(52, 152, 219)';
+    ctx1.beginPath();
+    
+    let sliceWidth = canvas1.width * 1.0 / bufferLength;
+    let x = 0;
+    
+    for(let i = 0; i < bufferLength; i++) {
+      let v = dataArray[i] / 128.0;
+      let y = v * canvas1.height/2;
+      if(i === 0) { ctx1.moveTo(x, y); } else { ctx1.lineTo(x, y); }
+      x += sliceWidth;
+    }
+    ctx1.lineTo(canvas1.width, canvas1.height/2);
+    ctx1.stroke();
+  }
+
+  // ==========================================
+  // 實驗二：相位抵銷邏輯 (視覺與真實聲音同步)
+  // ==========================================
+  const canvas2 = document.getElementById('phaseCanvas');
+  const ctx2 = canvas2.getContext('2d');
+  
+  let phaseAudioCtx, oscA, oscB, delayNode, phaseGain;
+  let isPhasePlaying = false;
+  const PHASE_FREQ = 440; // 鎖定頻率 440Hz 以便示範精準抵銷
+
+  function togglePhaseAudio() {
+    if (!phaseAudioCtx) {
+      phaseAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    
+    if (isPhasePlaying) {
+      oscA.stop();
+      oscB.stop();
+      document.getElementById('playPhaseBtn').innerText = '▶️ 播放雙聲波測試抵銷';
+      document.getElementById('playPhaseBtn').classList.remove('stop');
+      isPhasePlaying = false;
+    } else {
+      oscA = phaseAudioCtx.createOscillator();
+      oscB = phaseAudioCtx.createOscillator();
+      delayNode = phaseAudioCtx.createDelay(1); 
+      phaseGain = phaseAudioCtx.createGain();
+
+      oscA.type = 'sine';
+      oscB.type = 'sine';
+      oscA.frequency.value = PHASE_FREQ;
+      oscB.frequency.value = PHASE_FREQ;
+
+      // 設定總音量，避免兩個聲音疊加時過於刺耳
+      phaseGain.gain.value = 0.5;
+
+      // 喇叭 A (原始聲音藍色波) 直入總輸出
+      oscA.connect(phaseGain);
+      
+      // 喇叭 B (反相聲音紅色波) 先經過時間延遲器製造相位差，再入總輸出
+      oscB.connect(delayNode);
+      delayNode.connect(phaseGain);
+
+      phaseGain.connect(phaseAudioCtx.destination);
+
+      let phaseDeg = document.getElementById('phaseSlider').value;
+      setDelayTime(phaseDeg, 0);
+
+      // 關鍵物理原理：為了達到完美抵銷，必須確保兩個聲音在「完全相同」的微秒啟動
+      let startTime = phaseAudioCtx.currentTime + 0.1;
+      oscA.start(startTime);
+      oscB.start(startTime);
+
+      document.getElementById('playPhaseBtn').innerText = '⏹️ 停止播放';
+      document.getElementById('playPhaseBtn').classList.add('stop');
+      isPhasePlaying = true;
+    }
+  }
+
+  function setDelayTime(degrees, transitionTime = 0.1) {
+    if (delayNode && phaseAudioCtx) {
+      // 物理公式轉化：時間延遲 = (相位角度 / 360度) * 聲波週期 (1 / 頻率)
+      let delay = (degrees / 360) * (1 / PHASE_FREQ);
+      delayNode.delayTime.setTargetAtTime(delay, phaseAudioCtx.currentTime, transitionTime);
+    }
+  }
+
+  function updatePhase() {
+    let phaseDeg = document.getElementById('phaseSlider').value;
+    document.getElementById('phaseVal').innerText = phaseDeg + ' 度';
+    
+    // 如果正在播放，同步改變聲音的延遲時間來產生消音效果
+    if (isPhasePlaying) {
+      setDelayTime(phaseDeg);
+    }
+    drawPhaseVisuals(phaseDeg);
+  }
+
+  function drawPhaseVisuals(phaseDeg) {
+    let phaseRad = phaseDeg * (Math.PI / 180);
+    
+    ctx2.fillStyle = 'rgb(26, 26, 26)';
+    ctx2.fillRect(0, 0, canvas2.width, canvas2.height);
+    
+    let width = canvas2.width;
+    let height = canvas2.height;
+    let midY1 = height * 0.25;
+    let midY2 = height * 0.5;
+    let midY3 = height * 0.8;
+    let amplitude = 20;
+    let frequency = 0.05;
+
+    ctx2.lineWidth = 2;
+
+    // 波 1 (藍色)
+    ctx2.beginPath();
+    ctx2.strokeStyle = '#3498db';
+    for (let x = 0; x < width; x++) {
+      let y = midY1 + Math.sin(x * frequency) * amplitude;
+      if (x===0) ctx2.moveTo(x, y); else ctx2.lineTo(x, y);
+    }
+    ctx2.stroke();
+
+    // 波 2 (紅色)
+    ctx2.beginPath();
+    ctx2.strokeStyle = '#e74c3c';
+    for (let x = 0; x < width; x++) {
+      let y = midY2 + Math.sin(x * frequency + phaseRad) * amplitude;
+      if (x===0) ctx2.moveTo(x, y); else ctx2.lineTo(x, y);
+    }
+    ctx2.stroke();
+
+    // 總和波 (綠色結果)
+    ctx2.beginPath();
+    ctx2.strokeStyle = '#2ecc71';
+    ctx2.lineWidth = 3;
+    for (let x = 0; x < width; x++) {
+      let y1 = Math.sin(x * frequency) * amplitude;
+      let y2 = Math.sin(x * frequency + phaseRad) * amplitude;
+      let ySum = midY3 + (y1 + y2);
+      if (x===0) ctx2.moveTo(x, ySum); else ctx2.lineTo(x, ySum);
+    }
+    ctx2.stroke();
+  }
+
+  // 初始化畫面配置
+  window.onload = function() {
+    canvas1.width = canvas1.parentElement.clientWidth;
+    canvas2.width = canvas2.parentElement.clientWidth;
+    
+    ctx1.fillStyle = 'rgb(26, 26, 26)';
+    ctx1.fillRect(0, 0, canvas1.width, canvas1.height);
+    drawPhaseVisuals(0);
+  };
+</script>
+
+</body>
+</html>
